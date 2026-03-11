@@ -162,7 +162,12 @@ def process_pdf(self: Task, document_id: str):
         chunk_texts = [c["content"] for c in raw_chunks]
         if chunk_texts:
             try:
-                chunk_embeddings = embedding_service.embed_texts(chunk_texts)
+                # Batch embed in groups of 20 to avoid timeouts
+                chunk_embeddings = []
+                BATCH_SIZE = 20
+                for i in range(0, len(chunk_texts), BATCH_SIZE):
+                    batch = chunk_texts[i:i + BATCH_SIZE]
+                    chunk_embeddings.extend(embedding_service.embed_texts(batch))
             except Exception as e:
                 logger.warning("Failed to embed chunks: %s", e)
                 chunk_embeddings = [None] * len(chunk_texts)
@@ -228,6 +233,11 @@ def process_pdf(self: Task, document_id: str):
                         source=TagSource.AUTO,
                     )
                     db.add(doc_tag)
+
+            # Clear old chunks (in case of re-processing)
+            from sqlalchemy import delete as sa_delete
+            from app.models.chunk import DocumentChunk as DC
+            db.execute(sa_delete(DC).where(DC.document_id == document.id))
 
             # Save chunks
             for idx, (chunk_data, chunk_emb) in enumerate(

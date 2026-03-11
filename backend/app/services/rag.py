@@ -10,7 +10,6 @@ Pipeline:
 
 import logging
 import uuid
-from collections import defaultdict
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -49,25 +48,27 @@ class RAGService:
         )
 
         # Step 2: Vector search on chunks
+        distance_col = DocumentChunk.embedding.cosine_distance(query_embedding).label("distance")
         chunk_query = (
-            select(
-                DocumentChunk,
-                DocumentChunk.embedding.cosine_distance(query_embedding).label("distance"),
-            )
+            select(DocumentChunk, distance_col)
             .join(Document, Document.id == DocumentChunk.document_id)
             .where(
                 Document.status == DocumentStatus.READY,
                 DocumentChunk.embedding.isnot(None),
             )
-            .order_by("distance")
+            .order_by(distance_col)
             .limit(top_k)
         )
 
-        # Optional tag filter
+        # Optional tag filter — use subquery to avoid duplicate rows
         if tag_filter:
-            chunk_query = chunk_query.join(
-                DocumentTag, DocumentTag.document_id == Document.id
-            ).where(DocumentTag.tag_id.in_(tag_filter))
+            chunk_query = chunk_query.where(
+                DocumentChunk.document_id.in_(
+                    select(DocumentTag.document_id).where(
+                        DocumentTag.tag_id.in_(tag_filter)
+                    )
+                )
+            )
 
         result = await db.execute(chunk_query)
         rows = result.all()
@@ -142,23 +143,25 @@ class RAGService:
         top_k: int = 5,
     ) -> dict:
         """Fallback to document-level search when no chunks exist."""
+        distance_col = Document.embedding.cosine_distance(query_embedding).label("distance")
         doc_query = (
-            select(
-                Document,
-                Document.embedding.cosine_distance(query_embedding).label("distance"),
-            )
+            select(Document, distance_col)
             .where(
                 Document.status == DocumentStatus.READY,
                 Document.embedding.isnot(None),
             )
-            .order_by("distance")
+            .order_by(distance_col)
             .limit(top_k)
         )
 
         if tag_filter:
-            doc_query = doc_query.join(
-                DocumentTag, DocumentTag.document_id == Document.id
-            ).where(DocumentTag.tag_id.in_(tag_filter))
+            doc_query = doc_query.where(
+                Document.id.in_(
+                    select(DocumentTag.document_id).where(
+                        DocumentTag.tag_id.in_(tag_filter)
+                    )
+                )
+            )
 
         result = await db.execute(doc_query)
         rows = result.all()

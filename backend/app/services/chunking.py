@@ -136,11 +136,13 @@ def build_chunks_from_condensed_note(
             continue
 
         combined_len = len(buffer["content"]) + len(chunk["content"])
-        if combined_len < MIN_CHUNK_CHARS:
+        if combined_len < MIN_CHUNK_CHARS and combined_len <= MAX_CHUNK_CHARS:
             # Merge
             buffer["content"] = f"{buffer['content']}\n\n{chunk['content']}"
             if chunk.get("heading") and not buffer.get("heading"):
                 buffer["heading"] = chunk["heading"]
+            if chunk.get("page_start") and buffer.get("page_start"):
+                buffer["page_start"] = min(buffer["page_start"], chunk["page_start"])
             if chunk.get("page_end"):
                 buffer["page_end"] = chunk["page_end"]
         else:

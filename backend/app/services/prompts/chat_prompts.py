@@ -114,6 +114,11 @@ def build_chat_messages(
         else "No relevant documents found."
     )
 
+    # Token budget control — truncate if context is too large (~4000 tokens ≈ 16000 chars)
+    MAX_CONTEXT_CHARS = 16000
+    if len(context_text) > MAX_CONTEXT_CHARS:
+        context_text = context_text[:MAX_CONTEXT_CHARS] + "\n\n[Context truncated...]"
+
     messages.append({
         "role": "user",
         "content": f"Document context:\n{context_text}\n\nUser question: {query}",
