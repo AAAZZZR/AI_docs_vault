@@ -1,6 +1,7 @@
 "use client";
 
 import { Bot, User } from "lucide-react";
+import ReactMarkdown from "react-markdown";
 import { cn } from "@/lib/utils";
 
 interface MessageBubbleProps {
@@ -50,12 +51,18 @@ export default function MessageBubble({
             : "bg-white text-gray-800 shadow-sm border border-gray-100",
         )}
       >
-        <div className="whitespace-pre-wrap text-sm leading-relaxed">
-          {content}
-          {isStreaming && (
-            <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-current opacity-70" />
-          )}
-        </div>
+        {isUser ? (
+          <div className="whitespace-pre-wrap text-sm leading-relaxed">
+            {content}
+          </div>
+        ) : (
+          <div className="prose prose-sm prose-gray max-w-none text-sm leading-relaxed [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_pre]:bg-gray-50 [&_pre]:text-xs [&_code]:text-xs [&_table]:text-xs">
+            <ReactMarkdown>{content}</ReactMarkdown>
+            {isStreaming && (
+              <span className="ml-0.5 inline-block h-4 w-1.5 animate-pulse bg-gray-400 opacity-70" />
+            )}
+          </div>
+        )}
 
         {/* Document references */}
         {references && references.length > 0 && (
