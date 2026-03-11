@@ -9,8 +9,10 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.redis import publish_document_status_sync
+from app.models.chunk import DocumentChunk
 from app.models.document import Document, DocumentStatus
 from app.models.tag import DocumentTag, Tag, TagSource
+from app.services.chunking import build_chunks_from_condensed_note
 from app.services.embedding import embedding_service
 from app.services.llm import llm_service
 from app.services.pdf_parser import pdf_parser
@@ -152,6 +154,21 @@ def process_pdf(self: Task, document_id: str):
             condensed_note, existing_tags
         )
 
+        # Step 6.5: Build chunks and generate chunk embeddings
+        _publish(document_id, "processing", "Building chunks...")
+        raw_chunks = build_chunks_from_condensed_note(
+            condensed_note, page_extractions
+        )
+        chunk_texts = [c["content"] for c in raw_chunks]
+        if chunk_texts:
+            try:
+                chunk_embeddings = embedding_service.embed_texts(chunk_texts)
+            except Exception as e:
+                logger.warning("Failed to embed chunks: %s", e)
+                chunk_embeddings = [None] * len(chunk_texts)
+        else:
+            chunk_embeddings = []
+
         # Step 7: Save everything to DB
         _publish(document_id, "processing", "Saving results...")
         with Session(sync_engine) as db:
@@ -211,6 +228,22 @@ def process_pdf(self: Task, document_id: str):
                         source=TagSource.AUTO,
                     )
                     db.add(doc_tag)
+
+            # Save chunks
+            for idx, (chunk_data, chunk_emb) in enumerate(
+                zip(raw_chunks, chunk_embeddings)
+            ):
+                chunk = DocumentChunk(
+                    document_id=document.id,
+                    chunk_index=idx,
+                    content=chunk_data["content"],
+                    heading=chunk_data.get("heading"),
+                    page_start=chunk_data.get("page_start"),
+                    page_end=chunk_data.get("page_end"),
+                    token_count=chunk_data.get("token_count"),
+                    embedding=chunk_emb,
+                )
+                db.add(chunk)
 
             # Update document_count on tags
             for tag_data in tag_suggestions:

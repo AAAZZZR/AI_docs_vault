@@ -54,7 +54,10 @@ def build_chat_messages(
     condensed_notes: list[dict],
     conversation_history: list[dict],
 ) -> list[dict]:
-    """Build the messages array for the chat completion."""
+    """Build the messages array for the chat completion.
+
+    Uses chunk-level context for precision, with document summaries for breadth.
+    """
     messages = []
 
     # Add conversation history (last 10 messages)
@@ -64,32 +67,52 @@ def build_chat_messages(
     # Build context for the current query
     context_parts = []
 
+    # Primary context: relevant chunks (high precision)
+    if context_chunks:
+        context_parts.append("=== RELEVANT PASSAGES ===")
+        for chunk in context_chunks:
+            doc_title = chunk.get("document_title", "Unknown")
+            heading = chunk.get("heading", "")
+            page_start = chunk.get("page_start")
+            page_end = chunk.get("page_end")
+
+            page_str = ""
+            if page_start and page_end and page_start != page_end:
+                page_str = f" [Pages {page_start}-{page_end}]"
+            elif page_start:
+                page_str = f" [Page {page_start}]"
+
+            header = f"\n--- From: {doc_title}"
+            if heading:
+                header += f" > {heading}"
+            header += f"{page_str} ---"
+
+            context_parts.append(header)
+            context_parts.append(chunk["content"])
+
+    # Secondary context: document summaries (for breadth)
     if condensed_notes:
-        context_parts.append("=== DOCUMENTS ===")
+        context_parts.append("\n=== DOCUMENT SUMMARIES ===")
         for note in condensed_notes:
             doc_note = note.get("note", {})
-            parts = [f"\n--- {note.get('title', 'Untitled')} ---"]
-            if doc_note.get("summary"):
-                parts.append(f"Summary: {doc_note['summary']}")
-            for section in doc_note.get("sections", []):
-                heading = section.get("heading", "")
-                content = section.get("content", "")
-                pages = section.get("pages")
-                page_str = f" [Pages {pages}]" if pages else ""
-                if heading:
-                    parts.append(f"\n## {heading}{page_str}\n{content}")
-                elif content:
-                    parts.append(f"\n{content}{page_str}")
-            if doc_note.get("key_findings"):
-                parts.append(f"\nKey findings: {json.dumps(doc_note['key_findings'], ensure_ascii=False)}")
-            for table in doc_note.get("tables", []):
-                desc = table.get("description", "")
-                md = table.get("markdown", "")
-                if desc or md:
-                    parts.append(f"\nTable: {desc}\n{md}")
-            context_parts.append("\n".join(parts))
+            title = note.get("title", "Untitled")
+            summary = doc_note.get("summary", "")
+            key_findings = doc_note.get("key_findings", [])
 
-    context_text = "\n".join(context_parts) if context_parts else "No relevant documents found."
+            if summary:
+                context_parts.append(f"\n--- {title} ---")
+                context_parts.append(f"Summary: {summary}")
+                if key_findings:
+                    context_parts.append(
+                        "Key findings: "
+                        + json.dumps(key_findings, ensure_ascii=False)
+                    )
+
+    context_text = (
+        "\n".join(context_parts)
+        if context_parts
+        else "No relevant documents found."
+    )
 
     messages.append({
         "role": "user",

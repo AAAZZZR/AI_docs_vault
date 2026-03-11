@@ -50,3 +50,7 @@ class Document(Base, TimestampMixin):
     document_tags: Mapped[list["DocumentTag"]] = relationship(  # noqa: F821
         back_populates="document", cascade="all, delete-orphan"
     )
+    chunks: Mapped[list["DocumentChunk"]] = relationship(  # noqa: F821
+        back_populates="document", cascade="all, delete-orphan",
+        order_by="DocumentChunk.chunk_index",
+    )

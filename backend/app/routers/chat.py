@@ -83,15 +83,24 @@ async def send_message(
             full_response.append(chunk)
             yield {"event": "token", "data": json.dumps({"text": chunk})}
 
-        # Send document references
+        # Build unique document references from chunks + condensed notes
+        seen_ids = set()
+        doc_refs = []
+        for chunk in rag_context["chunks"]:
+            doc_id = chunk.get("document_id")
+            doc_title = chunk.get("document_title", "Unknown")
+            if doc_id and doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                doc_refs.append({"id": doc_id, "title": doc_title})
+        for cn in rag_context["condensed_notes"]:
+            doc_id = cn.get("document_id")
+            if doc_id and doc_id not in seen_ids:
+                seen_ids.add(doc_id)
+                doc_refs.append({"id": doc_id, "title": cn["title"]})
+
         yield {
             "event": "references",
-            "data": json.dumps({
-                "documents": [
-                    {"id": cn["document_id"], "title": cn["title"]}
-                    for cn in rag_context["condensed_notes"]
-                ]
-            }),
+            "data": json.dumps({"documents": doc_refs}),
         }
 
         # Save assistant response
