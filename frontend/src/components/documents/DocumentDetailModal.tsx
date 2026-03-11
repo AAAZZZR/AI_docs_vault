@@ -5,9 +5,11 @@ import {
   ChevronDown,
   ChevronRight,
   Download,
+  RefreshCw,
   X,
+  Loader2,
 } from "lucide-react";
-import { api, type Document, type CondensedNote } from "@/lib/api";
+import { api, type Document, type DocumentChunk, type CondensedNote } from "@/lib/api";
 import StatusBadge from "./StatusBadge";
 import TagChip from "@/components/tags/TagChip";
 
@@ -27,6 +29,9 @@ export default function DocumentDetailModal({
   const [expandedSections, setExpandedSections] = useState<Set<number>>(
     new Set(),
   );
+  const [chunks, setChunks] = useState<DocumentChunk[]>([]);
+  const [showChunks, setShowChunks] = useState(false);
+  const [reprocessing, setReprocessing] = useState(false);
 
   const fetchDocument = useCallback(async () => {
     try {
@@ -40,6 +45,30 @@ export default function DocumentDetailModal({
       setLoading(false);
     }
   }, [documentId]);
+
+  const fetchChunks = useCallback(async () => {
+    try {
+      const data = await api.getDocumentChunks(documentId);
+      setChunks(data);
+    } catch (err) {
+      console.error("Failed to fetch chunks:", err);
+    }
+  }, [documentId]);
+
+  const handleReprocess = async () => {
+    setReprocessing(true);
+    try {
+      await api.reprocessDocument(documentId);
+      // Refresh after a delay
+      setTimeout(() => {
+        fetchDocument();
+        setReprocessing(false);
+      }, 2000);
+    } catch (err) {
+      console.error("Failed to reprocess:", err);
+      setReprocessing(false);
+    }
+  };
 
   useEffect(() => {
     fetchDocument();
@@ -78,6 +107,20 @@ export default function DocumentDetailModal({
             )}
           </div>
           <div className="flex items-center gap-2">
+            {document?.status === "error" && (
+              <button
+                onClick={handleReprocess}
+                disabled={reprocessing}
+                className="flex items-center gap-1 rounded-md border border-amber-300 bg-amber-50 px-3 py-1.5 text-sm text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+              >
+                {reprocessing ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="h-4 w-4" />
+                )}
+                Reprocess
+              </button>
+            )}
             {document?.has_pdf && (
               <a
                 href={api.downloadDocumentUrl(documentId)}
@@ -220,6 +263,66 @@ export default function DocumentDetailModal({
                   </div>
                 </div>
               )}
+
+            {/* Chunks */}
+            <div className="mb-6">
+              <button
+                onClick={() => {
+                  setShowChunks(!showChunks);
+                  if (!showChunks && chunks.length === 0) fetchChunks();
+                }}
+                className="flex items-center gap-1 text-sm font-semibold text-gray-700 hover:text-indigo-600"
+              >
+                {showChunks ? (
+                  <ChevronDown className="h-4 w-4" />
+                ) : (
+                  <ChevronRight className="h-4 w-4" />
+                )}
+                RAG Chunks ({chunks.length || "..."})
+              </button>
+              {showChunks && chunks.length > 0 && (
+                <div className="mt-2 space-y-2">
+                  {chunks.map((chunk) => (
+                    <div
+                      key={chunk.id}
+                      className="rounded-md border border-gray-100 px-3 py-2"
+                    >
+                      <div className="flex items-center gap-2 text-xs text-gray-400">
+                        <span>#{chunk.chunk_index}</span>
+                        {chunk.heading && (
+                          <span className="font-medium text-gray-600">
+                            {chunk.heading}
+                          </span>
+                        )}
+                        {chunk.page_start && (
+                          <span>
+                            p.{chunk.page_start}
+                            {chunk.page_end && chunk.page_end !== chunk.page_start
+                              ? `-${chunk.page_end}`
+                              : ""}
+                          </span>
+                        )}
+                        {chunk.token_count && (
+                          <span>~{chunk.token_count} tokens</span>
+                        )}
+                        <span
+                          className={
+                            chunk.has_embedding
+                              ? "text-green-500"
+                              : "text-red-400"
+                          }
+                        >
+                          {chunk.has_embedding ? "✓ embedded" : "✗ no embedding"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs leading-relaxed text-gray-600">
+                        {chunk.content}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
 
             {/* Document metadata */}
             <div className="border-t border-gray-100 pt-4 text-xs text-gray-400">

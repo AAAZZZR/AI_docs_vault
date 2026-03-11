@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { FileText, MessageSquare, Vault } from "lucide-react";
+import { FileText, MessageSquare, Vault, Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Knowledge Base", icon: FileText },
   { href: "/chat", label: "Chat", icon: MessageSquare },
+  { href: "/evolution", label: "Tag Evolution", icon: Sparkles },
 ];
 
 export default function Sidebar() {
