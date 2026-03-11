@@ -25,13 +25,13 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
       try {
         await uploadPDF(file, (p) => setProgress(p));
         setProgress({
-          phase: "processing",
-          progress: 70,
-          detail: "Document is being analyzed...",
+          phase: "ready",
+          progress: 100,
+          detail: "Document ready!",
         });
-        // Refresh the document list after a short delay
+        onUploadComplete();
+        // Clear after showing success briefly
         setTimeout(() => {
-          onUploadComplete();
           setUploading(false);
           setProgress(null);
         }, 2000);
@@ -45,7 +45,7 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
         setTimeout(() => {
           setUploading(false);
           setProgress(null);
-        }, 3000);
+        }, 4000);
       }
     },
     [onUploadComplete],
@@ -58,6 +58,30 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
     maxSize: 100 * 1024 * 1024,
     disabled: uploading,
   });
+
+  const getIcon = () => {
+    if (!uploading || !progress) return <Upload className="h-4 w-4 text-gray-400" />;
+    switch (progress.phase) {
+      case "error":
+        return <AlertCircle className="h-4 w-4 text-red-500" />;
+      case "ready":
+        return <CheckCircle className="h-4 w-4 text-green-500" />;
+      default:
+        return <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />;
+    }
+  };
+
+  const getTextColor = () => {
+    if (!progress) return "text-gray-600";
+    switch (progress.phase) {
+      case "error":
+        return "text-red-600";
+      case "ready":
+        return "text-green-600";
+      default:
+        return "text-indigo-600";
+    }
+  };
 
   return (
     <div>
@@ -72,32 +96,26 @@ export default function UploadButton({ onUploadComplete }: UploadButtonProps) {
         )}
       >
         <input {...getInputProps()} />
-        {uploading && progress ? (
-          <div className="flex items-center justify-center gap-2">
-            {progress.phase === "error" ? (
-              <AlertCircle className="h-4 w-4 text-red-500" />
-            ) : (
-              <Loader2 className="h-4 w-4 animate-spin text-indigo-600" />
-            )}
-            <span
-              className={cn(
-                "text-sm",
-                progress.phase === "error"
-                  ? "text-red-600"
-                  : "text-indigo-600",
-              )}
-            >
-              {progress.detail}
-            </span>
-          </div>
-        ) : (
-          <div className="flex items-center justify-center gap-2">
-            <Upload className="h-4 w-4 text-gray-400" />
-            <span className="text-sm text-gray-600">
-              {isDragActive
+        <div className="flex items-center justify-center gap-2">
+          {getIcon()}
+          <span className={cn("text-sm", getTextColor())}>
+            {uploading && progress
+              ? progress.detail
+              : isDragActive
                 ? "Drop PDF here..."
                 : "Upload PDF or drag & drop"}
-            </span>
+          </span>
+        </div>
+        {/* Progress bar */}
+        {uploading && progress && progress.phase !== "error" && (
+          <div className="mt-2 h-1 w-full overflow-hidden rounded-full bg-gray-200">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-500",
+                progress.phase === "ready" ? "bg-green-500" : "bg-indigo-500",
+              )}
+              style={{ width: `${progress.progress}%` }}
+            />
           </div>
         )}
       </div>

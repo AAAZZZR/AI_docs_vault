@@ -24,6 +24,35 @@ from app.schemas.document import (
 router = APIRouter()
 
 
+@router.get("/status-stream", response_class=EventSourceResponse)
+async def document_status_stream(request: Request):
+    """SSE stream for real-time document processing status updates."""
+
+    async def event_generator():
+        pubsub = redis_client.pubsub()
+        channel = "document-status"
+        await pubsub.subscribe(channel)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                message = await pubsub.get_message(
+                    ignore_subscribe_messages=True, timeout=1.0
+                )
+                if message and message["type"] == "message":
+                    data = message["data"]
+                    if isinstance(data, bytes):
+                        data = data.decode()
+                    yield {"event": "status_update", "data": data}
+                else:
+                    yield {"event": "ping", "data": ""}
+        finally:
+            await pubsub.unsubscribe(channel)
+            await pubsub.aclose()
+
+    return EventSourceResponse(event_generator())
+
+
 @router.post("/upload", response_model=UploadResponse)
 async def upload_document(
     file: UploadFile = File(...),
@@ -223,32 +252,3 @@ async def delete_document(
         raise HTTPException(status_code=404, detail="Document not found")
 
     await db.delete(document)
-
-
-@router.get("/status-stream", response_class=EventSourceResponse)
-async def document_status_stream(request: Request):
-    """SSE stream for real-time document processing status updates."""
-
-    async def event_generator():
-        pubsub = redis_client.pubsub()
-        channel = "document-status"
-        await pubsub.subscribe(channel)
-        try:
-            while True:
-                if await request.is_disconnected():
-                    break
-                message = await pubsub.get_message(
-                    ignore_subscribe_messages=True, timeout=1.0
-                )
-                if message and message["type"] == "message":
-                    data = message["data"]
-                    if isinstance(data, bytes):
-                        data = data.decode()
-                    yield {"event": "status_update", "data": data}
-                else:
-                    yield {"event": "ping", "data": ""}
-        finally:
-            await pubsub.unsubscribe(channel)
-            await pubsub.aclose()
-
-    return EventSourceResponse(event_generator())
