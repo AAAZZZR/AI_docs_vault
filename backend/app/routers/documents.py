@@ -242,6 +242,7 @@ async def get_document(
 @router.get("/{document_id}/chunks")
 async def get_document_chunks(
     document_id: uuid.UUID,
+    full: bool = Query(False, description="Include full chunk content"),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all chunks for a document (useful for debugging and detail view)."""
@@ -263,7 +264,7 @@ async def get_document_chunks(
             "chunk_index": c.chunk_index,
             "heading": c.heading,
             "content": c.content[:300] + "..." if len(c.content) > 300 else c.content,
-            "full_content": c.content,
+            **({"full_content": c.content} if full else {}),
             "page_start": c.page_start,
             "page_end": c.page_end,
             "token_count": c.token_count,

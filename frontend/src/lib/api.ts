@@ -193,7 +193,7 @@ export interface DocumentChunk {
   chunk_index: number;
   heading: string | null;
   content: string;
-  full_content: string;
+  full_content?: string;
   page_start: number | null;
   page_end: number | null;
   token_count: number | null;
