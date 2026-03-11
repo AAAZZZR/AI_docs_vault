@@ -84,7 +84,7 @@ async def upload_document(
         status=DocumentStatus.PROCESSING,
     )
     db.add(document)
-    await db.flush()
+    await db.commit()  # Commit before dispatching task to avoid race condition
 
     # Dispatch Celery task
     from app.tasks.pdf_processing import process_pdf
@@ -245,6 +245,12 @@ async def get_document_chunks(
     db: AsyncSession = Depends(get_db),
 ):
     """Get all chunks for a document (useful for debugging and detail view)."""
+    doc_result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    if doc_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+
     result = await db.execute(
         select(DocumentChunk)
         .where(DocumentChunk.document_id == document_id)
@@ -284,7 +290,7 @@ async def reprocess_document(
 
     document.status = DocumentStatus.PROCESSING
     document.processing_error = None
-    await db.flush()
+    await db.commit()  # Commit before dispatching task to avoid race condition
 
     from app.tasks.pdf_processing import process_pdf
     process_pdf.delay(document_id=str(document_id))

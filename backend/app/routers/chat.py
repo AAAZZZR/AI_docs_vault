@@ -71,7 +71,8 @@ async def send_message(
         import queue
         import threading
 
-        token_queue: queue.Queue[str | None] = queue.Queue()
+        token_queue: queue.Queue[str | None | Exception] = queue.Queue()
+        cancel_event = threading.Event()
 
         def _stream_to_queue():
             try:
@@ -81,16 +82,18 @@ async def send_message(
                     rag_context["condensed_notes"],
                     history,
                 ):
+                    if cancel_event.is_set():
+                        break
                     token_queue.put(text)
             except Exception as e:
-                token_queue.put(None)
-                raise
+                token_queue.put(e)
             finally:
                 token_queue.put(None)  # Sentinel
 
         thread = threading.Thread(target=_stream_to_queue, daemon=True)
         thread.start()
 
+        stream_error = None
         while True:
             try:
                 chunk = await asyncio.to_thread(token_queue.get, timeout=30)
@@ -98,8 +101,18 @@ async def send_message(
                 break
             if chunk is None:
                 break
+            if isinstance(chunk, Exception):
+                stream_error = chunk
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"message": str(chunk)}),
+                }
+                break
             full_response.append(chunk)
             yield {"event": "token", "data": json.dumps({"text": chunk})}
+
+        # Signal thread to stop if client disconnected early
+        cancel_event.set()
 
         # Build unique document references from chunks + condensed notes
         seen_ids = set()
@@ -121,7 +134,11 @@ async def send_message(
             "data": json.dumps({"documents": doc_refs}),
         }
 
-        # Save assistant response
+        # Save assistant response (skip if error or empty)
+        if stream_error or not full_response:
+            yield {"event": "done", "data": ""}
+            return
+
         async with AsyncSessionLocal() as save_db:
             assistant_msg = ChatMessage(
                 role="assistant",

@@ -1,4 +1,5 @@
 from celery import Celery
+from celery.schedules import crontab
 
 from app.core.config import settings
 
@@ -25,7 +26,7 @@ celery_app.conf.update(
     beat_schedule={
         "tag-evolution-daily": {
             "task": "app.tasks.tag_evolution.run_tag_evolution",
-            "schedule": 86400.0,  # Every 24 hours
+            "schedule": crontab(hour=3, minute=0),  # Every day at 3:00 AM
         },
     },
 )
