@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from pgvector.sqlalchemy import Vector
+import sqlalchemy as sa
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -19,7 +20,9 @@ class DocumentChunk(Base):
 
     __tablename__ = "document_chunks"
 
-    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    id: Mapped[uuid.UUID] = mapped_column(
+        primary_key=True, server_default=sa.text("gen_random_uuid()")
+    )
     document_id: Mapped[uuid.UUID] = mapped_column(
         ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
     )

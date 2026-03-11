@@ -38,7 +38,8 @@ def upgrade() -> None:
     )
     op.create_index("ix_document_chunks_document_id", "document_chunks", ["document_id"])
     op.execute(
-        "CREATE INDEX ix_document_chunks_embedding ON document_chunks USING hnsw (embedding vector_cosine_ops)"
+        "CREATE INDEX ix_document_chunks_embedding ON document_chunks "
+        "USING hnsw (embedding vector_cosine_ops) WITH (m = 16, ef_construction = 64)"
     )
 
 
