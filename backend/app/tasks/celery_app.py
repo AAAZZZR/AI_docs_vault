@@ -22,6 +22,12 @@ celery_app.conf.update(
     task_routes={
         "app.tasks.pdf_processing.*": {"queue": "pdf_processing"},
     },
+    beat_schedule={
+        "tag-evolution-daily": {
+            "task": "app.tasks.tag_evolution.run_tag_evolution",
+            "schedule": 86400.0,  # Every 24 hours
+        },
+    },
 )
 
 celery_app.autodiscover_tasks(["app.tasks"])

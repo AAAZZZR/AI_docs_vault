@@ -11,6 +11,7 @@ from fastapi import Depends
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.redis import redis_client
+from app.models.chunk import DocumentChunk
 from app.models.document import Document, DocumentStatus
 from app.models.tag import DocumentTag, Tag
 from app.schemas.document import (
@@ -236,6 +237,59 @@ async def get_document(
         created_at=document.created_at,
         updated_at=document.updated_at,
     )
+
+
+@router.get("/{document_id}/chunks")
+async def get_document_chunks(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Get all chunks for a document (useful for debugging and detail view)."""
+    result = await db.execute(
+        select(DocumentChunk)
+        .where(DocumentChunk.document_id == document_id)
+        .order_by(DocumentChunk.chunk_index)
+    )
+    chunks = result.scalars().all()
+    return [
+        {
+            "id": str(c.id),
+            "chunk_index": c.chunk_index,
+            "heading": c.heading,
+            "content": c.content[:300] + "..." if len(c.content) > 300 else c.content,
+            "full_content": c.content,
+            "page_start": c.page_start,
+            "page_end": c.page_end,
+            "token_count": c.token_count,
+            "has_embedding": c.embedding is not None,
+        }
+        for c in chunks
+    ]
+
+
+@router.post("/{document_id}/reprocess")
+async def reprocess_document(
+    document_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-trigger processing for a document (e.g., after an error)."""
+    result = await db.execute(
+        select(Document).where(Document.id == document_id)
+    )
+    document = result.scalar_one_or_none()
+    if document is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if document.pdf_data is None:
+        raise HTTPException(status_code=400, detail="No PDF data to reprocess")
+
+    document.status = DocumentStatus.PROCESSING
+    document.processing_error = None
+    await db.flush()
+
+    from app.tasks.pdf_processing import process_pdf
+    process_pdf.delay(document_id=str(document_id))
+
+    return {"status": "processing", "document_id": str(document_id)}
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

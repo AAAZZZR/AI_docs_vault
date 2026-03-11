@@ -67,19 +67,37 @@ async def send_message(
     async def generate():
         full_response = []
 
-        def _stream():
-            return list(
-                llm_service.generate_chat_response(
+        # Real streaming: use a queue to bridge sync generator → async SSE
+        import queue
+        import threading
+
+        token_queue: queue.Queue[str | None] = queue.Queue()
+
+        def _stream_to_queue():
+            try:
+                for text in llm_service.generate_chat_response(
                     body.content,
                     rag_context["chunks"],
                     rag_context["condensed_notes"],
                     history,
-                )
-            )
+                ):
+                    token_queue.put(text)
+            except Exception as e:
+                token_queue.put(None)
+                raise
+            finally:
+                token_queue.put(None)  # Sentinel
 
-        chunks = await asyncio.to_thread(_stream)
+        thread = threading.Thread(target=_stream_to_queue, daemon=True)
+        thread.start()
 
-        for chunk in chunks:
+        while True:
+            try:
+                chunk = await asyncio.to_thread(token_queue.get, timeout=30)
+            except Exception:
+                break
+            if chunk is None:
+                break
             full_response.append(chunk)
             yield {"event": "token", "data": json.dumps({"text": chunk})}
 

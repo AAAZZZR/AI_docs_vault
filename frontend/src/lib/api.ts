@@ -73,6 +73,15 @@ export const api = {
   deleteDocument: (id: string) =>
     apiFetch<void>(`/documents/${id}`, { method: "DELETE" }),
 
+  getDocumentChunks: (id: string) =>
+    apiFetch<DocumentChunk[]>(`/documents/${id}/chunks`),
+
+  reprocessDocument: (id: string) =>
+    apiFetch<{ status: string; document_id: string }>(
+      `/documents/${id}/reprocess`,
+      { method: "POST" },
+    ),
+
   // Tags
   listTags: () => apiFetch<Tag[]>("/tags"),
 
@@ -174,8 +183,21 @@ export interface CondensedNote {
   sections: { heading: string; content: string; pages: number[] }[];
   key_findings: string[];
   tables: { description: string; markdown: string; page?: number }[];
+  figures: { caption: string; page: number }[];
   entities: Record<string, string[]>;
   auto_tags: string[];
+}
+
+export interface DocumentChunk {
+  id: string;
+  chunk_index: number;
+  heading: string | null;
+  content: string;
+  full_content: string;
+  page_start: number | null;
+  page_end: number | null;
+  token_count: number | null;
+  has_embedding: boolean;
 }
 
 export interface EvolutionEntry {
